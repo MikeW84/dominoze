@@ -124,9 +124,23 @@ body {
   transition: all 0.15s ease;
 }
 
-#new-puzzle-btn:hover {
+#new-puzzle-btn:hover,
+#clear-all-btn:hover {
   border-color: var(--color-text);
   color: var(--color-text);
+}
+
+#clear-all-btn {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border: 1.5px solid var(--color-text-muted);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 /* Game Area */

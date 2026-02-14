@@ -3,7 +3,8 @@ import { InteractionManager } from './interaction.js';
 import { ValidationManager } from './validation.js';
 import {
   renderBoard, renderTray, showLoading, hideLoading,
-  showWinModal, hideWinModal,
+  showWinModal, hideWinModal, removePlacedDomino, addDominoToTray,
+  clearErrorHighlights,
 } from './ui.js';
 
 let currentPuzzle = null;
@@ -26,6 +27,19 @@ function setupNewPuzzleButton() {
   document.getElementById('new-puzzle-btn').addEventListener('click', () => {
     const difficulty = document.querySelector('.diff-btn.active').dataset.difficulty;
     startGame(difficulty);
+  });
+}
+
+function setupClearAllButton() {
+  document.getElementById('clear-all-btn').addEventListener('click', () => {
+    if (!currentPuzzle) return;
+    const placedDominoes = currentPuzzle.dominoes.filter(d => d.placed);
+    for (const domino of placedDominoes) {
+      currentPuzzle.removeDomino(domino);
+      removePlacedDomino(domino);
+      addDominoToTray(domino);
+    }
+    clearErrorHighlights();
   });
 }
 
@@ -130,6 +144,7 @@ function getElapsedSeconds() {
 document.addEventListener('DOMContentLoaded', () => {
   setupDifficultyButtons();
   setupNewPuzzleButton();
+  setupClearAllButton();
   setupPlayAgainButton();
   startGame('easy');
 });

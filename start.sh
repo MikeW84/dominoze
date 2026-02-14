@@ -1,6 +1,6 @@
 #!/bin/sh
 PORT=8000
-LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || ipconfig getifaddr en0 2>/dev/null)
 
 echo "Starting Dominoze..."
 echo "  Local:   http://localhost:$PORT"
