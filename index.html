@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Dominoze</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <h1 class="title">Dominoze</h1>
+      <nav id="difficulty-nav">
+        <button class="diff-btn active" data-difficulty="easy">Easy</button>
+        <button class="diff-btn" data-difficulty="medium">Medium</button>
+        <button class="diff-btn" data-difficulty="hard">Hard</button>
+      </nav>
+    </header>
+
+    <div id="toolbar">
+      <div id="timer">0:00</div>
+      <button id="new-puzzle-btn">New Puzzle</button>
+    </div>
+
+    <main id="game-area">
+      <div id="board-wrapper">
+        <div id="board-container"></div>
+      </div>
+      <div id="tray-label">Dominoes</div>
+      <div id="tray-container"></div>
+    </main>
+  </div>
+
+  <div id="win-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <h2>Puzzle Complete!</h2>
+      <p id="win-time"></p>
+      <button id="play-again-btn">Play Again</button>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+    <p>Generating puzzle...</p>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+  <script>
+    // Detect file:// protocol and show instructions
+    if (location.protocol === 'file:') {
+      document.getElementById('board-container').innerHTML =
+        '<p style="padding:24px;color:#666;font-size:14px;line-height:1.6;text-align:left;max-width:400px">' +
+        '<strong style="color:#1a1a1a">Cannot open directly as a file.</strong><br><br>' +
+        'Run from the project folder:<br>' +
+        '<code style="background:#f0f0f0;padding:2px 6px;border-radius:3px">python3 -m http.server 8000</code><br><br>' +
+        'Then open <a href="http://localhost:8000">http://localhost:8000</a></p>';
+    }
+  </script>
+</body>
+</html>
