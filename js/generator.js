@@ -1,11 +1,11 @@
-import { ConstraintType, DIFFICULTY, generateFullDominoSet } from './constants.js';
+import { ConstraintType, DIFFICULTY, BOARD_SHAPES, generateFullDominoSet } from './constants.js';
 import { Board } from './board.js';
 import { Region } from './region.js';
 import { Domino } from './domino.js';
 import { Puzzle } from './puzzle.js';
 import { Solver } from './solver.js';
 
-function shuffle(arr) {
+export function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -13,27 +13,29 @@ function shuffle(arr) {
   return arr;
 }
 
-function randomInRange(min, max) {
+export function randomInRange(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-function pick(arr) {
+export function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Board shapes per difficulty (keep hard to max 8 dominoes for reliable solving)
-const BOARD_SHAPES = {
-  easy:   [[2, 3], [2, 4], [2, 5]],
-  medium: [[3, 4], [2, 6]],
-  hard:   [[4, 4], [2, 8], [3, 4]],
-};
-
-function createBoard(difficulty) {
-  const [rows, cols] = pick(BOARD_SHAPES[difficulty]);
-  return new Board(rows, cols);
+export function createBoardFromShape(shape) {
+  const board = new Board(shape.rows, shape.cols);
+  if (shape.mask) {
+    for (let r = 0; r < shape.rows; r++) {
+      for (let c = 0; c < shape.cols; c++) {
+        if (!shape.mask[r * shape.cols + c]) {
+          board.cells[r][c].active = false;
+        }
+      }
+    }
+  }
+  return board;
 }
 
-function findTiling(board) {
+export function findTiling(board) {
   const activeCells = board.getActiveCells()
     .sort((a, b) => a.row - b.row || a.col - b.col);
   const covered = new Set();
@@ -88,7 +90,7 @@ function assignDominoes(tiling) {
 }
 
 // Create regions with a mix of sizes. Key: ensure some single-cell regions for uniqueness.
-function createRegions(board, numRegions, maxRegionSize, singleCellRatio = 0.3) {
+export function createRegions(board, numRegions, maxRegionSize, singleCellRatio = 0.3) {
   const activeCells = board.getActiveCells();
   const totalCells = activeCells.length;
 
@@ -175,7 +177,7 @@ function createRegions(board, numRegions, maxRegionSize, singleCellRatio = 0.3) 
   return regions;
 }
 
-function assignConstraints(regions, solutionMap, allowedTypes) {
+export function assignConstraints(regions, solutionMap, allowedTypes) {
   for (const region of regions) {
     const values = [...region.cellKeys].map(key => solutionMap.get(key));
 
@@ -239,7 +241,7 @@ function assignConstraints(regions, solutionMap, allowedTypes) {
   }
 }
 
-function tightenConstraints(regions, solutionMap, allowedTypes) {
+export function tightenConstraints(regions, solutionMap, allowedTypes) {
   let changed = false;
   for (const region of regions) {
     if (region.constraintType !== ConstraintType.NONE) continue;
@@ -254,8 +256,8 @@ function tightenConstraints(regions, solutionMap, allowedTypes) {
   return changed;
 }
 
-function tryGenerateWithBoard(rows, cols, config, singleCellRatio) {
-  const board = new Board(rows, cols);
+function tryGenerateWithShape(shape, config, singleCellRatio) {
+  const board = createBoardFromShape(shape);
 
   const tiling = findTiling(board);
   if (!tiling) return null;
@@ -309,10 +311,13 @@ function tryGenerateWithBoard(rows, cols, config, singleCellRatio) {
   return null;
 }
 
-export function generatePuzzle(difficulty) {
+export function generatePuzzle(difficulty, { noRectangles = false } = {}) {
   const config = DIFFICULTY[difficulty];
   const singleCellRatio = difficulty === 'hard' ? 0.5 : 0.3;
-  const shapes = BOARD_SHAPES[difficulty];
+  let shapes = BOARD_SHAPES[difficulty];
+  if (noRectangles) {
+    shapes = shapes.filter(s => s.mask !== null);
+  }
 
   if (difficulty === 'hard') {
     // Hard: try shapes in order (largest first), with time budget per shape
@@ -321,10 +326,9 @@ export function generatePuzzle(difficulty) {
 
     for (let si = 0; si < shapes.length; si++) {
       const shapeStart = Date.now();
-      const [rows, cols] = shapes[si];
 
       while (Date.now() - shapeStart < timePerShape) {
-        const puzzle = tryGenerateWithBoard(rows, cols, config, singleCellRatio);
+        const puzzle = tryGenerateWithShape(shapes[si], config, singleCellRatio);
         if (puzzle) {
           puzzle.difficulty = difficulty;
           return puzzle;
@@ -334,8 +338,7 @@ export function generatePuzzle(difficulty) {
   } else {
     // Easy/medium: random shape selection, quick retries
     for (let retry = 0; retry < 200; retry++) {
-      const [rows, cols] = pick(shapes);
-      const puzzle = tryGenerateWithBoard(rows, cols, config, singleCellRatio);
+      const puzzle = tryGenerateWithShape(pick(shapes), config, singleCellRatio);
       if (puzzle) {
         puzzle.difficulty = difficulty;
         return puzzle;

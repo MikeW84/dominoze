@@ -49,6 +49,10 @@ body {
   align-items: center;
 }
 
+body.split-mode #app {
+  max-width: 960px;
+}
+
 /* Header */
 #header {
   text-align: center;
@@ -90,6 +94,54 @@ body {
 .diff-btn.active {
   background: var(--color-text);
   color: var(--color-bg);
+}
+
+/* Split mode toggle */
+.split-btn {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 20px;
+  border: 2px solid var(--color-accent);
+  border-radius: 24px;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 8px;
+}
+
+.split-btn:hover {
+  background: rgba(86, 123, 149, 0.08);
+}
+
+.split-btn.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* Option toggles (irregular, etc.) */
+.option-btn {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 20px;
+  border: 2px solid #8B7355;
+  border-radius: 24px;
+  background: transparent;
+  color: #8B7355;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 8px;
+}
+
+.option-btn:hover {
+  background: rgba(139, 115, 85, 0.08);
+}
+
+.option-btn.active {
+  background: #8B7355;
+  color: #fff;
 }
 
 /* Toolbar */
@@ -155,6 +207,18 @@ body {
   display: flex;
   justify-content: center;
   margin-bottom: 20px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.board-container {
+  display: inline-grid;
+  gap: 0;
+  position: relative;
+}
+
+.board-container.hidden {
+  display: none;
 }
 
 #board-container {
@@ -177,6 +241,8 @@ body {
 .cell-inactive {
   visibility: hidden;
   pointer-events: none;
+  background: none !important;
+  border: none !important;
 }
 
 .cell.drop-hover {
@@ -463,6 +529,15 @@ body {
 
   .modal-content {
     padding: 32px 28px;
+  }
+
+  #board-wrapper {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #difficulty-nav {
+    flex-wrap: wrap;
   }
 }
 

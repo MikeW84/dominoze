@@ -1,4 +1,5 @@
 import { generatePuzzle } from './generator.js';
+import { generateSplitPuzzle } from './split-generator.js';
 import { InteractionManager } from './interaction.js';
 import { ValidationManager } from './validation.js';
 import {
@@ -12,6 +13,8 @@ let interactionManager = null;
 let validationManager = null;
 let timerInterval = null;
 let startTime = null;
+let splitMode = false;
+let noRectangles = false;
 
 function setupDifficultyButtons() {
   document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -20,6 +23,27 @@ function setupDifficultyButtons() {
       btn.classList.add('active');
       startGame(btn.dataset.difficulty);
     });
+  });
+}
+
+function setupSplitToggle() {
+  const btn = document.getElementById('split-toggle');
+  btn.addEventListener('click', () => {
+    splitMode = !splitMode;
+    btn.classList.toggle('active', splitMode);
+    document.body.classList.toggle('split-mode', splitMode);
+    const difficulty = document.querySelector('.diff-btn.active').dataset.difficulty;
+    startGame(difficulty);
+  });
+}
+
+function setupIrregularToggle() {
+  const btn = document.getElementById('irregular-toggle');
+  btn.addEventListener('click', () => {
+    noRectangles = !noRectangles;
+    btn.classList.toggle('active', noRectangles);
+    const difficulty = document.querySelector('.diff-btn.active').dataset.difficulty;
+    startGame(difficulty);
   });
 }
 
@@ -34,12 +58,27 @@ function setupClearAllButton() {
   document.getElementById('clear-all-btn').addEventListener('click', () => {
     if (!currentPuzzle) return;
     const placedDominoes = currentPuzzle.dominoes.filter(d => d.placed);
-    for (const domino of placedDominoes) {
-      currentPuzzle.removeDomino(domino);
-      removePlacedDomino(domino);
-      addDominoToTray(domino);
+
+    if (splitMode) {
+      const boardA = document.getElementById('board-container');
+      const boardB = document.getElementById('board-b-container');
+      for (const domino of placedDominoes) {
+        const bi = currentPuzzle.getBoardIndexForDomino(domino);
+        const container = bi === 1 ? boardB : boardA;
+        currentPuzzle.removeDomino(domino);
+        removePlacedDomino(domino, container);
+        addDominoToTray(domino);
+      }
+      clearErrorHighlights(boardA);
+      clearErrorHighlights(boardB);
+    } else {
+      for (const domino of placedDominoes) {
+        currentPuzzle.removeDomino(domino);
+        removePlacedDomino(domino);
+        addDominoToTray(domino);
+      }
+      clearErrorHighlights();
     }
-    clearErrorHighlights();
   });
 }
 
@@ -69,31 +108,65 @@ async function startGame(difficulty) {
   // Yield to let loading overlay render
   await new Promise(r => setTimeout(r, 50));
 
+  const boardA = document.getElementById('board-container');
+  const boardB = document.getElementById('board-b-container');
+
   try {
-    currentPuzzle = generatePuzzle(difficulty);
+    if (splitMode) {
+      currentPuzzle = generateSplitPuzzle(difficulty, { noRectangles });
+    } else {
+      currentPuzzle = generatePuzzle(difficulty, { noRectangles });
+    }
   } catch (err) {
     console.error('Puzzle generation failed:', err);
     hideLoading();
-    document.getElementById('board-container').innerHTML =
+    boardA.innerHTML =
       '<p style="padding:20px;color:var(--color-error)">Failed to generate puzzle. Try again.</p>';
     return;
   }
 
   hideLoading();
 
-  // Render
-  renderBoard(currentPuzzle.board, currentPuzzle.regions);
-  renderTray(currentPuzzle.dominoes);
+  if (splitMode) {
+    // Show both board containers
+    boardB.classList.remove('hidden');
 
-  // Setup validation
-  validationManager = new ValidationManager(currentPuzzle);
+    // Render both boards
+    renderBoard(currentPuzzle.boards[0], currentPuzzle.regions[0], boardA);
+    renderBoard(currentPuzzle.boards[1], currentPuzzle.regions[1], boardB);
+    renderTray(currentPuzzle.dominoes);
 
-  // Setup interaction
-  interactionManager = new InteractionManager(
-    currentPuzzle,
-    onDominoPlaced,
-    onDominoRemoved,
-  );
+    const boardContainers = [boardA, boardB];
+
+    // Setup validation
+    validationManager = new ValidationManager(currentPuzzle, boardContainers);
+
+    // Setup interaction
+    interactionManager = new InteractionManager(
+      currentPuzzle,
+      onDominoPlaced,
+      onDominoRemoved,
+      boardContainers,
+    );
+  } else {
+    // Hide second board container
+    boardB.classList.add('hidden');
+    boardB.innerHTML = '';
+
+    // Render single board
+    renderBoard(currentPuzzle.board, currentPuzzle.regions, boardA);
+    renderTray(currentPuzzle.dominoes);
+
+    // Setup validation
+    validationManager = new ValidationManager(currentPuzzle);
+
+    // Setup interaction
+    interactionManager = new InteractionManager(
+      currentPuzzle,
+      onDominoPlaced,
+      onDominoRemoved,
+    );
+  }
 
   // Start timer
   startTimer();
@@ -143,6 +216,8 @@ function getElapsedSeconds() {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   setupDifficultyButtons();
+  setupSplitToggle();
+  setupIrregularToggle();
   setupNewPuzzleButton();
   setupClearAllButton();
   setupPlayAgainButton();

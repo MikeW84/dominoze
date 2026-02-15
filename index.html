@@ -17,6 +17,8 @@
         <button class="diff-btn active" data-difficulty="easy">Easy</button>
         <button class="diff-btn" data-difficulty="medium">Medium</button>
         <button class="diff-btn" data-difficulty="hard">Hard</button>
+        <button id="split-toggle" class="split-btn">Split</button>
+        <button id="irregular-toggle" class="option-btn">Irregular</button>
       </nav>
     </header>
 
@@ -28,7 +30,8 @@
 
     <main id="game-area">
       <div id="board-wrapper">
-        <div id="board-container"></div>
+        <div id="board-container" class="board-container" data-board-index="0"></div>
+        <div id="board-b-container" class="board-container hidden" data-board-index="1"></div>
       </div>
       <div id="tray-label">Dominoes</div>
       <div id="tray-container"></div>

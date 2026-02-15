@@ -1,12 +1,15 @@
 import { PIP_LAYOUTS } from './constants.js';
 
-// Render the board grid
-export function renderBoard(board, regions) {
-  const container = document.getElementById('board-container');
+// Render the board grid into a container element
+export function renderBoard(board, regions, containerEl) {
+  const container = containerEl || document.getElementById('board-container');
   container.innerHTML = '';
 
   container.style.gridTemplateColumns = `repeat(${board.cols}, var(--cell-size))`;
   container.style.gridTemplateRows = `repeat(${board.rows}, var(--cell-size))`;
+
+  // Read board index from container's data attribute (default 0)
+  const boardIndex = container.dataset.boardIndex || '0';
 
   // Track which regions have had their label placed
   const labeledRegions = new Set();
@@ -18,6 +21,7 @@ export function renderBoard(board, regions) {
       div.classList.add('cell');
       div.dataset.row = r;
       div.dataset.col = c;
+      div.dataset.boardIndex = boardIndex;
       // Explicit grid position so placed dominoes don't displace cells
       div.style.gridRow = r + 1;
       div.style.gridColumn = c + 1;
@@ -112,12 +116,12 @@ function createDominoHalf(pipCount) {
 }
 
 // Render a placed domino on the board
-export function renderPlacedDomino(domino, board) {
+export function renderPlacedDomino(domino, board, containerEl) {
   // Remove from tray
   const trayEl = document.querySelector(`#tray-container .domino[data-domino-id="${domino.id}"]`);
   if (trayEl) trayEl.remove();
 
-  const container = document.getElementById('board-container');
+  const container = containerEl || document.getElementById('board-container');
 
   const isHorizontal = domino.cellA.row === domino.cellB.row;
   const minRow = Math.min(domino.cellA.row, domino.cellB.row);
@@ -164,10 +168,17 @@ export function renderPlacedDomino(domino, board) {
   container.appendChild(el);
 }
 
-// Remove placed domino from board and return to tray
-export function removePlacedDomino(domino) {
-  const placedEl = document.querySelector(`#board-container .domino-placed[data-domino-id="${domino.id}"]`);
-  if (placedEl) placedEl.remove();
+// Remove placed domino from board
+export function removePlacedDomino(domino, containerEl) {
+  if (containerEl) {
+    const placedEl = containerEl.querySelector(`.domino-placed[data-domino-id="${domino.id}"]`);
+    if (placedEl) placedEl.remove();
+  } else {
+    // Search all board containers
+    const placedEl = document.querySelector(`.board-container .domino-placed[data-domino-id="${domino.id}"]`)
+      || document.querySelector(`#board-container .domino-placed[data-domino-id="${domino.id}"]`);
+    if (placedEl) placedEl.remove();
+  }
 }
 
 // Re-add domino to tray
@@ -178,15 +189,19 @@ export function addDominoToTray(domino) {
   container.appendChild(el);
 }
 
-// Apply error highlights to cells
-export function applyErrorHighlights(violations) {
-  // Clear all errors
-  document.querySelectorAll('.cell.error-cell').forEach(c => c.classList.remove('error-cell'));
+// Apply error highlights to cells within a container scope
+export function applyErrorHighlights(violations, containerEl) {
+  if (containerEl) {
+    containerEl.querySelectorAll('.cell.error-cell').forEach(c => c.classList.remove('error-cell'));
+  } else {
+    document.querySelectorAll('.cell.error-cell').forEach(c => c.classList.remove('error-cell'));
+  }
 
   for (const v of violations) {
     for (const cellKey of v.cellKeys) {
       const [r, c] = cellKey.split(',').map(Number);
-      const cellDiv = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+      const scope = containerEl || document;
+      const cellDiv = scope.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
       if (cellDiv && !cellDiv.classList.contains('cell-inactive')) {
         cellDiv.classList.add('error-cell');
       }
@@ -195,8 +210,9 @@ export function applyErrorHighlights(violations) {
 }
 
 // Clear all error highlights
-export function clearErrorHighlights() {
-  document.querySelectorAll('.cell.error-cell').forEach(c => c.classList.remove('error-cell'));
+export function clearErrorHighlights(containerEl) {
+  const scope = containerEl || document;
+  scope.querySelectorAll('.cell.error-cell').forEach(c => c.classList.remove('error-cell'));
 }
 
 // Show/hide loading
@@ -225,13 +241,15 @@ export function hideWinModal() {
   document.getElementById('win-modal').classList.add('hidden');
 }
 
-// Highlight drop zone cells
-export function highlightDropZone(cells, board) {
+// Highlight drop zone cells within a container scope
+export function highlightDropZone(cells, board, containerEl) {
   clearDropHighlights();
+
+  const scope = containerEl || document;
 
   for (const { row, col } of cells) {
     const cell = board.getCell(row, col);
-    const cellDiv = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+    const cellDiv = scope.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
     if (!cellDiv) continue;
 
     if (!cell || !cell.active || cell.dominoId !== null) {

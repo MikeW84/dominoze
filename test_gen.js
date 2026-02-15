@@ -12,7 +12,8 @@ for (const diff of ['easy', 'medium', 'hard']) {
       const ms = Date.now() - start;
       totalMs += ms;
       pass++;
-      const shape = `${puzzle.board.rows}x${puzzle.board.cols}`;
+      const activeCells = puzzle.board.getActiveCells().length;
+      const shape = `${puzzle.board.rows}x${puzzle.board.cols}(${activeCells})`;
       shapes[shape] = (shapes[shape] || 0) + 1;
       if (ms > 2000) console.log(`  #${i+1}: ${shape} ${puzzle.dominoes.length}dom ${puzzle.regions.length}reg ${ms}ms (slow)`);
     } catch (e) {

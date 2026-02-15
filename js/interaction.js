@@ -4,7 +4,7 @@ import {
 } from './ui.js';
 
 export class InteractionManager {
-  constructor(puzzle, onPlacement, onRemoval) {
+  constructor(puzzle, onPlacement, onRemoval, boardContainers) {
     this.puzzle = puzzle;
     this.onPlacement = onPlacement;
     this.onRemoval = onRemoval;
@@ -15,6 +15,10 @@ export class InteractionManager {
     this._boardDrag = null;
     this._abortController = new AbortController();
 
+    // Board containers: array of DOM elements
+    this.boardContainers = boardContainers || [document.getElementById('board-container')];
+    this.isSplit = this.boardContainers.length > 1;
+
     this._onTouchMove = this._onTouchMove.bind(this);
     this._onTouchEnd = this._onTouchEnd.bind(this);
 
@@ -24,7 +28,6 @@ export class InteractionManager {
   init() {
     const signal = this._abortController.signal;
     const tray = document.getElementById('tray-container');
-    const board = document.getElementById('board-container');
 
     // Tray: drag start + click-to-rotate + touch
     tray.addEventListener('dragstart', (e) => this._onDragStart(e), { signal });
@@ -32,13 +35,14 @@ export class InteractionManager {
     tray.addEventListener('mouseup', (e) => this._onMouseUp(e), { signal });
     tray.addEventListener('touchstart', (e) => this._onTouchStart(e), { passive: false, signal });
 
-    // Board: HTML5 drop target for tray drags
-    board.addEventListener('dragover', (e) => this._onDragOver(e), { signal });
-    board.addEventListener('dragleave', () => clearDropHighlights(), { signal });
-    board.addEventListener('drop', (e) => this._onDrop(e), { signal });
+    // Board(s): HTML5 drop target + mouse-based drag for repositioning
+    for (const board of this.boardContainers) {
+      board.addEventListener('dragover', (e) => this._onDragOver(e), { signal });
+      board.addEventListener('dragleave', () => clearDropHighlights(), { signal });
+      board.addEventListener('drop', (e) => this._onDrop(e), { signal });
+      board.addEventListener('mousedown', (e) => this._onBoardMouseDown(e), { signal });
+    }
 
-    // Board: mouse-based drag for repositioning placed dominoes
-    board.addEventListener('mousedown', (e) => this._onBoardMouseDown(e), { signal });
     document.addEventListener('mousemove', (e) => this._onBoardMouseMove(e), { signal });
     document.addEventListener('mouseup', (e) => this._onBoardMouseUp(e), { signal });
 
@@ -51,7 +55,23 @@ export class InteractionManager {
     this._abortController.abort();
   }
 
-  // Event delegation handles tray rebinding automatically
+  // --- Board index helpers ---
+
+  _getBoardIndex(cellDiv) {
+    if (!cellDiv) return 0;
+    return parseInt(cellDiv.dataset.boardIndex || '0');
+  }
+
+  _getBoard(boardIndex) {
+    if (this.isSplit) {
+      return this.puzzle.getBoard(boardIndex);
+    }
+    return this.puzzle.board;
+  }
+
+  _getBoardContainer(boardIndex) {
+    return this.boardContainers[boardIndex] || this.boardContainers[0];
+  }
 
   // --- Drag and Drop (Desktop) ---
 
@@ -82,6 +102,10 @@ export class InteractionManager {
     const domino = this._getDomino(placedEl.dataset.dominoId);
     if (!domino) return;
 
+    // Determine which board container this placed domino is in
+    const boardContainer = placedEl.closest('.board-container');
+    const boardIndex = boardContainer ? parseInt(boardContainer.dataset.boardIndex || '0') : 0;
+
     e.preventDefault();
     const grabbedHalf = this._getGrabbedHalf(placedEl, domino, e.clientX, e.clientY);
     this._boardDrag = {
@@ -91,6 +115,7 @@ export class InteractionManager {
       startY: e.clientY,
       active: false,
       grabbedHalf,
+      sourceBoardIndex: boardIndex,
     };
   }
 
@@ -104,11 +129,15 @@ export class InteractionManager {
     if (!this._boardDrag.active && dx + dy > 5) {
       this._boardDrag.active = true;
 
-      // Unplace the domino and hide the original
-      this.puzzle.removeDomino(this._boardDrag.domino);
+      // Unplace the domino
+      if (this.isSplit) {
+        this.puzzle.removeDomino(this._boardDrag.domino);
+      } else {
+        this.puzzle.removeDomino(this._boardDrag.domino);
+      }
       this.onRemoval(this._boardDrag.domino);
 
-      // Create ghost BEFORE hiding original (so clone inherits visible state)
+      // Create ghost BEFORE hiding original
       this._createGhost(this._boardDrag.element, e.clientX, e.clientY);
       this._boardDrag.element.style.opacity = '0';
     }
@@ -122,11 +151,14 @@ export class InteractionManager {
     if (cellDiv) {
       const row = parseInt(cellDiv.dataset.row);
       const col = parseInt(cellDiv.dataset.col);
-      const anchor = this._findBestAnchor(this._boardDrag.domino, row, col, this._boardDrag.grabbedHalf);
+      const boardIndex = this._getBoardIndex(cellDiv);
+      const board = this._getBoard(boardIndex);
+      const container = this._getBoardContainer(boardIndex);
+      const anchor = this._findBestAnchor(this._boardDrag.domino, row, col, this._boardDrag.grabbedHalf, boardIndex);
       if (anchor) {
-        highlightDropZone(this._boardDrag.domino.getPlacementCells(anchor.row, anchor.col), this.puzzle.board);
+        highlightDropZone(this._boardDrag.domino.getPlacementCells(anchor.row, anchor.col), board, container);
       } else {
-        highlightDropZone(this._boardDrag.domino.getPlacementCells(row, col), this.puzzle.board);
+        highlightDropZone(this._boardDrag.domino.getPlacementCells(row, col), board, container);
       }
     } else {
       clearDropHighlights();
@@ -144,8 +176,13 @@ export class InteractionManager {
 
     if (!this._boardDrag.active) {
       // Was a click, not a drag - return to tray
-      this.puzzle.removeDomino(this._boardDrag.domino);
-      removePlacedDomino(this._boardDrag.domino);
+      if (this.isSplit) {
+        this.puzzle.removeDomino(this._boardDrag.domino);
+      } else {
+        this.puzzle.removeDomino(this._boardDrag.domino);
+      }
+      const sourceContainer = this._getBoardContainer(this._boardDrag.sourceBoardIndex);
+      removePlacedDomino(this._boardDrag.domino, sourceContainer);
       addDominoToTray(this._boardDrag.domino);
       this.onRemoval(this._boardDrag.domino);
       this._boardDrag = null;
@@ -158,9 +195,10 @@ export class InteractionManager {
     if (cellDiv) {
       const row = parseInt(cellDiv.dataset.row);
       const col = parseInt(cellDiv.dataset.col);
-      const anchor = this._findBestAnchor(this._boardDrag.domino, row, col, this._boardDrag.grabbedHalf);
+      const boardIndex = this._getBoardIndex(cellDiv);
+      const anchor = this._findBestAnchor(this._boardDrag.domino, row, col, this._boardDrag.grabbedHalf, boardIndex);
       if (anchor) {
-        placed = this._tryPlace(this._boardDrag.domino, anchor.row, anchor.col);
+        placed = this._tryPlace(this._boardDrag.domino, anchor.row, anchor.col, boardIndex);
       }
     }
 
@@ -191,13 +229,16 @@ export class InteractionManager {
 
     const row = parseInt(cellDiv.dataset.row);
     const col = parseInt(cellDiv.dataset.col);
-    // Show best anchor position for this cell
-    const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf);
+    const boardIndex = this._getBoardIndex(cellDiv);
+    const board = this._getBoard(boardIndex);
+    const container = this._getBoardContainer(boardIndex);
+
+    const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf, boardIndex);
     if (anchor) {
       const cells = this.dragState.domino.getPlacementCells(anchor.row, anchor.col);
-      highlightDropZone(cells, this.puzzle.board);
+      highlightDropZone(cells, board, container);
     } else {
-      highlightDropZone(this.dragState.domino.getPlacementCells(row, col), this.puzzle.board);
+      highlightDropZone(this.dragState.domino.getPlacementCells(row, col), board, container);
     }
   }
 
@@ -211,9 +252,10 @@ export class InteractionManager {
     if (cellDiv) {
       const row = parseInt(cellDiv.dataset.row);
       const col = parseInt(cellDiv.dataset.col);
-      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf);
+      const boardIndex = this._getBoardIndex(cellDiv);
+      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf, boardIndex);
       if (anchor) {
-        this._tryPlace(this.dragState.domino, anchor.row, anchor.col);
+        this._tryPlace(this.dragState.domino, anchor.row, anchor.col, boardIndex);
       }
     }
 
@@ -307,11 +349,14 @@ export class InteractionManager {
     if (cellDiv) {
       const row = parseInt(cellDiv.dataset.row);
       const col = parseInt(cellDiv.dataset.col);
-      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf);
+      const boardIndex = this._getBoardIndex(cellDiv);
+      const board = this._getBoard(boardIndex);
+      const container = this._getBoardContainer(boardIndex);
+      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf, boardIndex);
       if (anchor) {
-        highlightDropZone(this.dragState.domino.getPlacementCells(anchor.row, anchor.col), this.puzzle.board);
+        highlightDropZone(this.dragState.domino.getPlacementCells(anchor.row, anchor.col), board, container);
       } else {
-        highlightDropZone(this.dragState.domino.getPlacementCells(row, col), this.puzzle.board);
+        highlightDropZone(this.dragState.domino.getPlacementCells(row, col), board, container);
       }
     } else {
       clearDropHighlights();
@@ -347,9 +392,10 @@ export class InteractionManager {
     if (cellDiv) {
       const row = parseInt(cellDiv.dataset.row);
       const col = parseInt(cellDiv.dataset.col);
-      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf);
+      const boardIndex = this._getBoardIndex(cellDiv);
+      const anchor = this._findBestAnchor(this.dragState.domino, row, col, this.dragState.grabbedHalf, boardIndex);
       if (anchor) {
-        this._tryPlace(this.dragState.domino, anchor.row, anchor.col);
+        this._tryPlace(this.dragState.domino, anchor.row, anchor.col, boardIndex);
       }
     }
 
@@ -361,29 +407,32 @@ export class InteractionManager {
 
   // --- Helpers ---
 
-  // Find the cell element from a drag/drop event, even if target is a child or overlay
   _findCellFromEvent(e) {
     // Try direct target first
     let cellDiv = e.target.closest('.cell');
     if (cellDiv) return cellDiv;
 
     // If dropped on a placed domino or board container, find cell by coordinates
-    const board = document.getElementById('board-container');
-    const boardRect = board.getBoundingClientRect();
-    const x = e.clientX - boardRect.left;
-    const y = e.clientY - boardRect.top;
+    // Check each board container
+    for (const boardContainer of this.boardContainers) {
+      const boardRect = boardContainer.getBoundingClientRect();
+      const x = e.clientX - boardRect.left;
+      const y = e.clientY - boardRect.top;
 
-    if (x < 0 || y < 0 || x > boardRect.width || y > boardRect.height) return null;
+      if (x < 0 || y < 0 || x > boardRect.width || y > boardRect.height) continue;
 
-    // Calculate cell from pixel position
-    const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
-    const col = Math.floor(x / cellSize);
-    const row = Math.floor(y / cellSize);
+      const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
+      const col = Math.floor(x / cellSize);
+      const row = Math.floor(y / cellSize);
+      const bi = boardContainer.dataset.boardIndex || '0';
 
-    return document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+      const found = boardContainer.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+      if (found) return found;
+    }
+
+    return null;
   }
 
-  // Detect which half of a domino was grabbed based on click/touch position
   _getGrabbedHalf(dominoEl, domino, clientX, clientY) {
     const rect = dominoEl.getBoundingClientRect();
     if (domino.isHorizontal) {
@@ -393,34 +442,30 @@ export class InteractionManager {
     }
   }
 
-  // Find best anchor position based on which half the user grabbed
-  _findBestAnchor(domino, row, col, grabbedHalf = 0) {
+  _findBestAnchor(domino, row, col, grabbedHalf = 0, boardIndex = 0) {
     if (grabbedHalf === 1) {
-      // Grabbed second half - offset so second half lands on hovered cell
       if (domino.isHorizontal) {
-        if (this._canPlace(domino, row, col - 1)) return { row, col: col - 1 };
+        if (this._canPlace(domino, row, col - 1, boardIndex)) return { row, col: col - 1 };
       } else {
-        if (this._canPlace(domino, row - 1, col)) return { row: row - 1, col };
+        if (this._canPlace(domino, row - 1, col, boardIndex)) return { row: row - 1, col };
       }
-      // Fallback: try hovered cell as anchor
-      if (this._canPlace(domino, row, col)) return { row, col };
+      if (this._canPlace(domino, row, col, boardIndex)) return { row, col };
     } else {
-      // Grabbed first half - hovered cell is the anchor
-      if (this._canPlace(domino, row, col)) return { row, col };
-      // Fallback: offset so second half lands on hovered cell
+      if (this._canPlace(domino, row, col, boardIndex)) return { row, col };
       if (domino.isHorizontal) {
-        if (this._canPlace(domino, row, col - 1)) return { row, col: col - 1 };
+        if (this._canPlace(domino, row, col - 1, boardIndex)) return { row, col: col - 1 };
       } else {
-        if (this._canPlace(domino, row - 1, col)) return { row: row - 1, col };
+        if (this._canPlace(domino, row - 1, col, boardIndex)) return { row: row - 1, col };
       }
     }
     return null;
   }
 
-  _canPlace(domino, row, col) {
+  _canPlace(domino, row, col, boardIndex = 0) {
+    const board = this._getBoard(boardIndex);
     const cells = domino.getPlacementCells(row, col);
-    const cellA = this.puzzle.board.getCell(cells[0].row, cells[0].col);
-    const cellB = this.puzzle.board.getCell(cells[1].row, cells[1].col);
+    const cellA = board.getCell(cells[0].row, cells[0].col);
+    const cellB = board.getCell(cells[1].row, cells[1].col);
     if (!cellA || !cellB) return false;
     if (!cellA.active || !cellB.active) return false;
     if (cellA.dominoId !== null || cellB.dominoId !== null) return false;
@@ -431,18 +476,26 @@ export class InteractionManager {
     return this.puzzle.dominoes.find(d => d.id === id);
   }
 
-  _tryPlace(domino, row, col) {
+  _tryPlace(domino, row, col, boardIndex = 0) {
+    const board = this._getBoard(boardIndex);
     const cells = domino.getPlacementCells(row, col);
-    const cellA = this.puzzle.board.getCell(cells[0].row, cells[0].col);
-    const cellB = this.puzzle.board.getCell(cells[1].row, cells[1].col);
+    const cellA = board.getCell(cells[0].row, cells[0].col);
+    const cellB = board.getCell(cells[1].row, cells[1].col);
 
     if (!cellA || !cellB) return false;
     if (!cellA.active || !cellB.active) return false;
     if (cellA.dominoId !== null || cellB.dominoId !== null) return false;
 
-    const success = this.puzzle.placeDomino(domino, cells[0], cells[1]);
+    let success;
+    if (this.isSplit) {
+      success = this.puzzle.placeDomino(domino, boardIndex, cells[0], cells[1]);
+    } else {
+      success = this.puzzle.placeDomino(domino, cells[0], cells[1]);
+    }
+
     if (success) {
-      renderPlacedDomino(domino, this.puzzle.board);
+      const container = this._getBoardContainer(boardIndex);
+      renderPlacedDomino(domino, board, container);
       this.onPlacement(domino);
     }
     return success;
@@ -458,11 +511,9 @@ export class InteractionManager {
     const rect = sourceEl.getBoundingClientRect();
     this.ghostElement = sourceEl.cloneNode(true);
     this.ghostElement.classList.add('domino-ghost');
-    // Clear inline styles that shouldn't carry over to the ghost
     this.ghostElement.style.opacity = '';
     this.ghostElement.style.gridRow = '';
     this.ghostElement.style.gridColumn = '';
-    // Preserve dimensions (placed dominoes lose size outside grid context)
     this.ghostElement.style.width = `${rect.width}px`;
     this.ghostElement.style.height = `${rect.height}px`;
     document.body.appendChild(this.ghostElement);
